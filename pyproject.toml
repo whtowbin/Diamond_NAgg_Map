@@ -1,10 +1,10 @@
 [project]
 name = "diamond-NAgg-map"
-version = "0.2.0"
-description = "Add your description here"
+version = "0.7.1"
+description = "A Script for processing FTIR MAPS of diamond plates and calculating nitrogen aggregation state"
 readme = "README.md"
 authors = [
-    { name = "WHTowbin", email = "24940778+whtowbin@users.noreply.github.com" }
+    { name = "WHTowbin", email = "24940778+whtowbin@users.noreply.github.com" },
 ]
 requires-python = ">=3.13"
 dependencies = [
@@ -23,10 +23,16 @@ dependencies = [
 diamond-nagg-map = "diamond_NAgg_map:main"
 
 [project.optional-dependencies]
-dev = [
-    "ipykernel>=6.29.5",
-]
+dev = ["ipykernel>=6.29.5"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+
+# Guide for including folder with data in the build https://wersdoerfer.de/blogs/ephes_blog/how-to-add-extra-data-to-a-python-package/
+# [tool.hatch.build.targets.sdist]
+# include = ["src/Diamond_NAgg_Map"]
+
+# [tool.hatch.build.targets.wheel]
+# include = ["src/Diamond_NAgg_Map"]

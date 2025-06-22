@@ -2,7 +2,7 @@
 import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
-import os
+# import os
 from pathlib import Path
 import numpy as np
 from datetime import datetime
@@ -15,8 +15,16 @@ from scipy.optimize import lsq_linear
 from ftir_map import LoadOmnicMAP as omnic
 
 # Reference files (edit as needed)
-TYPEIIA_PATH = "Quiddit_Spectra_Files/typeIIa.csv"
-CAXBD_PATH = "Quiddit_Spectra_Files/CAXBD.csv"
+parent_dir = Path(__file__).parent
+TYPEIIA_PATH = parent_dir / "Quiddit_Spectra_Files" / "typeIIa.csv"
+if not TYPEIIA_PATH.exists():
+    raise FileNotFoundError(f"TypeIIa reference file not found at {TYPEIIA_PATH}")
+CAXBD_PATH = parent_dir / "Quiddit_Spectra_Files" / "CAXBD.csv"
+if not CAXBD_PATH.exists():
+    raise FileNotFoundError(f"CAXBD reference file not found at {CAXBD_PATH}")  
+
+# TYPEIIA_PATH = "Quiddit_Spectra_Files/typeIIa.csv"
+# CAXBD_PATH = "Quiddit_Spectra_Files/CAXBD.csv"
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Process FTIR .map files for Nitrogen aggregation fits.")
@@ -64,6 +72,7 @@ def fit_CAXBD(spectrum, CAXBD_matrix):
         print("Value Error")
         params = np.zeros(5)
     return xr.DataArray(params)
+
 
 def process_map(
     map_path,

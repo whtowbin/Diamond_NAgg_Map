@@ -73,6 +73,41 @@ def fit_CAXBD(spectrum, CAXBD_matrix):
         params = np.zeros(5)
     return xr.DataArray(params)
 
+def plot_n_agg_fit(xi, yi, normalized_spectra, N_Fit_Map_DS, CAXBD_Spectra_np, wn_array, output_folder, filename, date_time, ratio):
+    """
+    Plot the nitrogen aggregation fit for a single spectrum at (xi, yi),
+    including individual component fits.
+    """
+    # Extract measured spectrum
+    spec = normalized_spectra.isel(x=xi, y=yi).sel(wn=wn_array)
+    # Extract fit parameters
+    fit_params = (N_Fit_Map_DS/ratio).isel(x=xi, y=yi)
+    fit_params_array = fit_params.to_array().values
+
+    # Individual component fits (C, A, X, B, D)
+    component_labels = ["C", "A", "X", "B", "D"]
+    component_colors = ["purple", "green", "orange", "brown", "gray"]
+    component_fits = [CAXBD_Spectra_np[:, i] * fit_params_array[i] for i in range(5)]
+
+    # Reconstruct total fit spectrum
+    fit_spectrum = np.dot(CAXBD_Spectra_np, fit_params_array)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(12,8))
+    ax.plot(wn_array, spec.values, label="Measured (Baseline Subtracted)", color="blue")
+    ax.plot(wn_array, fit_spectrum, label="CAXBD Total Fit", color="red", linestyle="--")
+    for i, comp_fit in enumerate(component_fits):
+        ax.plot(wn_array, comp_fit, label=f"{component_labels[i]} Component", color=component_colors[i], linestyle=":", linewidth = 3)
+    ax.set_title(f"N Aggregation Fit (x={xi}, y={yi})")
+    ax.set_xlabel("Wavenumber")
+    ax.set_ylabel("Absorbance")
+    ax.set_xlim(800, 1430)
+    ax.legend()
+    plt.gca().invert_xaxis()
+    plt.tight_layout()
+    plt.savefig(f"{output_folder}/{filename}_N-Agg_fit_example_{xi}_{yi}_{date_time}.png")
+    plt.close()
+
 
 def process_map(
     map_path,
@@ -124,11 +159,12 @@ def process_map(
         fig, ax = plt.subplots()
         map.spectra.isel(x=xi, y=yi).plot(ax=ax, label="Original")
         baselines.isel(x=xi, y=yi).plot(ax=ax, label="Baseline")
-        (map.spectra.isel(x=xi, y=yi) - baselines.isel(x=xi, y=yi)).plot(ax=ax, label="Baseline Subtracted")
+        # (map.spectra.isel(x=xi, y=yi) - baselines.isel(x=xi, y=yi)).plot(ax=ax, label="Baseline Subtracted")
         ax.set_title(f"Baseline Fit Example (x={xi}, y={yi})")
         ax.set_xlabel("Wavenumber")
         ax.set_ylabel("Absorbance")
         ax.legend()
+        ax.set_xlim(600, 4000)
         plt.gca().invert_xaxis()
         plt.tight_layout()
         plt.savefig(f"{output_folder}/{filename}_baseline_fit_example_{i+1}_{date_time}.png")
@@ -145,7 +181,7 @@ def process_map(
     stdev = (spec_masked.spectra).std("wn") / spec_masked.spectra.mean("wn")
     normalized_spectra = (baseline_subtracted.spectra / ratio)
 
-    for i, (xi, yi) in enumerate(example_coords):
+    for i, (xi, yi) in enumerate(example_coords):  # TODO Split into two plots with baseline subtracted and typeIIa reference # 
         fig, ax = plt.subplots()
         # Baseline-subtracted spectrum at this point
         # spec = baseline_subtracted.spectra.isel(x=xi, y=yi)
@@ -191,25 +227,69 @@ def process_map(
         output_core_dims=[["params"]],
         vectorize=True,
     )
+
     N_Fit_Map_DS = N_Fit_Map.to_dataset("params")
     N_Fit_Map_DS = N_Fit_Map_DS.rename_vars({0: "C", 1: "A", 2: "X", 3: "B", 4: "D"})
 
+
+    for xi, yi in example_coords[:n_examples]:
+        plot_n_agg_fit(
+            xi, yi,
+            normalized_spectra,
+            N_Fit_Map_DS,
+            CAXBD_Spectra_np,
+            wn_array,
+            output_folder,
+            filename,
+            date_time,
+            ratio
+        )
+        
     # Calculate ppm and save images
     A_Center_ppm = N_Fit_Map_DS.A * 16.5 / ratio
     B_Center_ppm = N_Fit_Map_DS.B * 79.4 / ratio
     B_percent = B_Center_ppm / (B_Center_ppm + A_Center_ppm) * 100
     Total_N = A_Center_ppm + B_Center_ppm
 
+
+    # # TODO plot spectral fits for example spectra
+
+    # for i, (xi, yi) in enumerate(example_coords):  # 
+    #     fig, axs = plt.subplots()
+    #     # Baseline-subtracted spectrum at this point
+    #     # spec = baseline_subtracted.spectra.isel(x=xi, y=yi)
+    #     spec = normalized_spectra.isel(x=xi, y=yi)
+    #     spec.plot(ax=ax, label="Baseline Subtracted")
+
+    #     N_Fit_Comp = N_Fit_Map_DS.isel(x=xi, y=yi)
+    #     return N_Fit_Comp
+
+        
+    #     # TypeIIa reference, interpolated and masked to same wn range
+    #     # typeIIa_ref = typeIIA_interp.absorbance.sel(wn=spec.wn)
+    #     # typeIIa_ref.plot(ax=ax, label="TypeIIa Reference")
+
+    #     # ax.set_title(f"TypeIIa vs Baseline Subtracted (x={xi}, y={yi})")
+    #     ax.set_xlim(600, 1400)
+    #     ax.set_xlabel("Wavenumber")
+    #     ax.set_ylabel("Absorbance")
+    #     ax.legend()
+    #     plt.gca().invert_xaxis()
+    #     plt.tight_layout()
+    #     plt.savefig(f"{output_folder}/{filename}_N-Agg_fit_example_{i+1}_{date_time}.png")
+    #     plt.close() 
+
+
     sns_cmap = sns.color_palette("mako", as_cmap=True)
-    for arr, name, vmin, vmax in [
-        (A_Center_ppm, "A_Center_ppm_Map", 300, 550),
-        (B_Center_ppm, "B_Center_ppm_Map", 0, 100),
-        (B_percent, "B_percent_Map", 0, 60),
-        (N_Fit_Map_DS.C, "C_Map", 0, .01),
-        (N_Fit_Map_DS.D, "D_Map", 0, .05),
-        (Total_N, "Total_N_Map", 100, 1100),
+    for arr, name in [
+        (A_Center_ppm, "A_Center_ppm_Map"),
+        (B_Center_ppm, "B_Center_ppm_Map"),
+        (B_percent, "B_percent_Map"),
+        (N_Fit_Map_DS.C, "C_Map"),
+        (N_Fit_Map_DS.D, "D_Map"),
+        (Total_N, "Total_N_Map")
     ]:
-        ax = arr.plot(vmin=vmin, vmax=vmax, cmap=sns_cmap if "Map" in name else None)
+        ax = arr.plot(cmap=sns_cmap if "Map" in name else None)
         ax.axes.set_aspect("equal")
         plt.savefig(f"{output_folder}/{filename}_{name}_{date_time}.png")
         imageio.imwrite(f"{output_folder}/{filename}_{name}_{date_time}.tif", arr.to_numpy().astype('float16'))
@@ -220,8 +300,8 @@ def process_map(
 if __name__ == "__main__":
     args = parse_args()
     process_map(args.map_path, args.output)
-# %%
-# process_map(
+#%%
+# comp = process_map(
 #     "/Users/henrytowbin/Projects/A-Center Diamond  N3 Lifetime/CBP-0261/CBP-0261_Map_50umApt_25umStep_4wnRes_8scans_4-1-24_.map",
 #     "Results",
 #     baseline_lam=1e7,   # adjust as needed

@@ -1,6 +1,6 @@
 [project]
 name = "diamond-NAgg-map"
-version = "0.7.1"
+version = "0.8.0"
 description = "A Script for processing FTIR MAPS of diamond plates and calculating nitrogen aggregation state"
 readme = "README.md"
 authors = [

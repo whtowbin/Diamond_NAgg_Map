@@ -1,6 +1,6 @@
 [project]
 name = "diamond-NAgg-map"
-version = "0.8.0"
+version = "0.9.0"
 description = "A Script for processing FTIR MAPS of diamond plates and calculating nitrogen aggregation state"
 readme = "README.md"
 authors = [
@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-diamond-nagg-map = "diamond_NAgg_map:main"
+diamond-nagg-map = "diamond_nagg_map.DiamondNAggMap:main"
 
 [project.optional-dependencies]
 dev = ["ipykernel>=6.29.5"]

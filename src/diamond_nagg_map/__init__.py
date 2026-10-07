@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from diamond-nagg-map!")
+"""Nitrogen aggregation maps from FTIR maps of diamond plates."""

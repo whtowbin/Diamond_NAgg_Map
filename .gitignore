@@ -11,3 +11,5 @@ wheels/
 
 #Test output
 Results/
+# macOS
+.DS_Store

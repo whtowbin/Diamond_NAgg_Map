@@ -32,8 +32,15 @@ def parse_args():
     parser.add_argument("--output", type=str, default="Results", help="Output folder for results")
     parser.add_argument("--lam", type=float, default=2e7, help="Baseline fit parameter lam (default: 2e7)")
     parser.add_argument("--p", type=float, default=0.000001, help="Baseline fit parameter p (default: 0.000001)")
-    parser.add_argument("--n_examples", type=int, default=5, help="Number of example spectra to plot (default: 5)")
-    return parser.parse_args()
+    parser.add_argument(
+        "--n_examples", type=int, nargs="+", default=[5],
+        help="Grid of example spectra to plot: N for an N x N grid, or NX NY (default: 5)",
+    )
+    args = parser.parse_args()
+    if len(args.n_examples) > 2:
+        parser.error("--n_examples takes one or two integers")
+    args.n_examples = args.n_examples[0] if len(args.n_examples) == 1 else tuple(args.n_examples)
+    return args
 
 def micron_to_dpi(microns):
     inches = (microns/ 1000000 * 39.37)
@@ -116,7 +123,7 @@ def process_map(
     caxbd_path=CAXBD_PATH,
     baseline_lam=2e7,
     baseline_p=0.000001,
-    n_examples=5
+    n_examples= (5,5) 
 ):
     Path(output_folder).mkdir(parents=True, exist_ok=True)
     filename = Path(map_path).stem
@@ -133,8 +140,11 @@ def process_map(
     # Load map
     map = omnic.Load_Omnic_Map(map_path)
     stacked = map.stack(allpoints=("x", "y"))
+    y_length = len(map.y)
+    x_length = len(map.x)
     mid_x_IDX = round(len(map.x)/2)
     mid_y_IDX = round(len(map.y)/2)
+
 
     # Interpolate to common grid
     interpolated = interpolate_to_common_grid(stacked).unstack("allpoints")
@@ -148,27 +158,44 @@ def process_map(
     baseline_subtracted = interpolated - baselines_interp
 
     # --- Save baseline fit plots for a few example spectra ---
-    example_coords = [
-        (mid_x_IDX-10, mid_y_IDX-10),
-        (mid_x_IDX-10, mid_y_IDX+10),
-        (mid_x_IDX+10, mid_y_IDX-10),
-        (mid_x_IDX+10, mid_y_IDX+10),
-        (mid_x_IDX, mid_y_IDX)
-    ]
-    for i, (xi, yi) in enumerate(example_coords[:n_examples]):
-        fig, ax = plt.subplots()
-        map.spectra.isel(x=xi, y=yi).plot(ax=ax, label="Original")
-        baselines.isel(x=xi, y=yi).plot(ax=ax, label="Baseline")
-        # (map.spectra.isel(x=xi, y=yi) - baselines.isel(x=xi, y=yi)).plot(ax=ax, label="Baseline Subtracted")
-        ax.set_title(f"Baseline Fit Example (x={xi}, y={yi})")
-        ax.set_xlabel("Wavenumber")
-        ax.set_ylabel("Absorbance")
-        ax.legend()
-        ax.set_xlim(600, 4000)
-        plt.gca().invert_xaxis()
-        plt.tight_layout()
-        plt.savefig(f"{output_folder}/{filename}_baseline_fit_example_{i+1}_{date_time}.png")
-        plt.close()
+    if type(n_examples) != int:
+        example_step_y = max(1, round(y_length/n_examples[1]))
+        example_step_x = max(1, round(x_length/n_examples[0]))
+    else:
+        example_step_y = max(1, round(y_length/n_examples))
+        example_step_x = max(1, round(x_length/n_examples))
+
+    example_coords_x = np.arange(stop=x_length,step = example_step_x).astype(int)
+    example_coords_y = np.arange(stop=y_length, step= example_step_y).astype(int)
+
+
+    # example_coords = [
+    #     (mid_x_IDX-10, mid_y_IDX-10),
+    #     (mid_x_IDX-10, mid_y_IDX+10),
+    #     (mid_x_IDX+10, mid_y_IDX-10),
+    #     (mid_x_IDX+10, mid_y_IDX+10),
+    #     (mid_x_IDX, mid_y_IDX)
+    # ]
+    
+
+
+    # for i, (xi, yi) in enumerate(example_coords):
+    for xi in example_coords_x:
+        for yi in example_coords_y:
+
+            fig, ax = plt.subplots()
+            map.spectra.isel(x=xi, y=yi).plot(ax=ax, label="Original")
+            baselines.isel(x=xi, y=yi).plot(ax=ax, label="Baseline")
+            # (map.spectra.isel(x=xi, y=yi) - baselines.isel(x=xi, y=yi)).plot(ax=ax, label="Baseline Subtracted")
+            ax.set_title(f"Baseline Fit Example (x={xi}, y={yi})")
+            ax.set_xlabel("Wavenumber")
+            ax.set_ylabel("Absorbance")
+            ax.legend()
+            ax.set_xlim(600, 4000)
+            plt.gca().invert_xaxis()
+            plt.tight_layout()
+            plt.savefig(f"{output_folder}/{filename}_baseline_fit_example_x-{xi}_y-{yi}_{date_time}.png")
+            plt.close()
 
     # Reference spectra
     typeIIA = pd.read_csv(typeiia_path, names=["wn", "absorbance"]).set_index("wn").to_xarray()
@@ -181,24 +208,26 @@ def process_map(
     stdev = (spec_masked.spectra).std("wn") / spec_masked.spectra.mean("wn")
     normalized_spectra = (baseline_subtracted.spectra / ratio)
 
-    for i, (xi, yi) in enumerate(example_coords):  # TODO Split into two plots with baseline subtracted and typeIIa reference # 
-        fig, ax = plt.subplots()
-        # Baseline-subtracted spectrum at this point
-        # spec = baseline_subtracted.spectra.isel(x=xi, y=yi)
-        spec = normalized_spectra.isel(x=xi, y=yi)
-        spec.plot(ax=ax, label="Baseline Subtracted")
-        # TypeIIa reference, interpolated and masked to same wn range
-        typeIIa_ref = typeIIA_interp.absorbance.sel(wn=spec.wn)
-        typeIIa_ref.plot(ax=ax, label="TypeIIa Reference")
-        ax.set_title(f"TypeIIa vs Baseline Subtracted (x={xi}, y={yi})")
-        ax.set_xlim(1400, 4000)
-        ax.set_xlabel("Wavenumber")
-        ax.set_ylabel("Absorbance")
-        ax.legend()
-        plt.gca().invert_xaxis()
-        plt.tight_layout()
-        plt.savefig(f"{output_folder}/{filename}_typeIIa_fit_example_{i+1}_{date_time}.png")
-        plt.close() 
+    # for i, (xi, yi) in enumerate(example_coords):  # TODO Split into two plots with baseline subtracted and typeIIa reference # 
+    for xi in example_coords_x:
+        for yi in example_coords_y:
+            fig, ax = plt.subplots()
+            # Baseline-subtracted spectrum at this point
+            # spec = baseline_subtracted.spectra.isel(x=xi, y=yi)
+            spec = normalized_spectra.isel(x=xi, y=yi)
+            spec.plot(ax=ax, label="Baseline Subtracted")
+            # TypeIIa reference, interpolated and masked to same wn range
+            typeIIa_ref = typeIIA_interp.absorbance.sel(wn=spec.wn)
+            typeIIa_ref.plot(ax=ax, label="TypeIIa Reference")
+            ax.set_title(f"TypeIIa vs Baseline Subtracted (x={xi}, y={yi})")
+            ax.set_xlim(1400, 4000)
+            ax.set_xlabel("Wavenumber")
+            ax.set_ylabel("Absorbance")
+            ax.legend()
+            plt.gca().invert_xaxis()
+            plt.tight_layout()
+            plt.savefig(f"{output_folder}/{filename}_typeIIa_fit_example_x-{xi}_y-{yi}_{date_time}.png")
+            plt.close() 
     
     # Filter spectra (optional, can be commented out)
     filtered_normalized_spectra =  normalized_spectra.where(
@@ -232,19 +261,20 @@ def process_map(
     N_Fit_Map_DS = N_Fit_Map_DS.rename_vars({0: "C", 1: "A", 2: "X", 3: "B", 4: "D"})
 
 
-    for xi, yi in example_coords[:n_examples]:
-        plot_n_agg_fit(
-            xi, yi,
-            normalized_spectra,
-            N_Fit_Map_DS,
-            CAXBD_Spectra_np,
-            wn_array,
-            output_folder,
-            filename,
-            date_time,
-            ratio
-        )
-        
+    for xi in example_coords_x:
+        for yi in example_coords_y:
+            plot_n_agg_fit(
+                xi, yi,
+                normalized_spectra,
+                N_Fit_Map_DS,
+                CAXBD_Spectra_np,
+                wn_array,
+                output_folder,
+                filename,
+                date_time,
+                ratio
+            )
+            
     # Calculate ppm and save images
     A_Center_ppm = N_Fit_Map_DS.A * 16.5 / ratio
     B_Center_ppm = N_Fit_Map_DS.B * 79.4 / ratio
@@ -276,7 +306,7 @@ def process_map(
     #     ax.legend()
     #     plt.gca().invert_xaxis()
     #     plt.tight_layout()
-    #     plt.savefig(f"{output_folder}/{filename}_N-Agg_fit_example_{i+1}_{date_time}.png")
+    #     plt.savefig(f"{output_folder}/{filename}_N-Agg_fit_example_x-{xi}_y-{yi}_{date_time}.png")
     #     plt.close() 
 
 
@@ -297,15 +327,30 @@ def process_map(
 
     print(f"All maps saved to {output_folder}")
 #%%
-if __name__ == "__main__":
+def main():
+    """Command-line entry point (diamond-nagg-map)."""
     args = parse_args()
-    process_map(args.map_path, args.output)
+    process_map(
+        args.map_path,
+        args.output,
+        baseline_lam=args.lam,
+        baseline_p=args.p,
+        n_examples=args.n_examples,
+    )
+
+
+if __name__ == "__main__":
+    main()
 #%%
 # comp = process_map(
 #     "/Users/henrytowbin/Projects/A-Center Diamond  N3 Lifetime/CBP-0261/CBP-0261_Map_50umApt_25umStep_4wnRes_8scans_4-1-24_.map",
 #     "Results",
 #     baseline_lam=1e7,   # adjust as needed
 #     baseline_p=0.00001, # adjust as needed
-#     n_examples=3        # number of baseline fit plots to save
+#     n_examples= (3,3)        # number of baseline fit plots to save
 # )
 # %%
+
+
+# TODO Make a keyword arg to save the processed arrays in a dictionary for interactive work 
+# TODO Make an arguement to filter data based on fit quality or thickness of diamond peak. Maybe Based on R% for fit quality

@@ -16,11 +16,11 @@ Calculates nitrogen concentration and aggregation state across FTIR maps of diam
 Requires Python 3.13 or later.
 
 ```bash
-uv tool install git+https://github.com/whtowbin/Diamond_NAgg_Map
+uv tool install diamond-nagg-map
 diamond-nagg-map path/to/sample.map --output Results
 ```
 
-Version 0.8.0 on PyPI has a broken `diamond-nagg-map` command; use the GitHub install until 0.9.0 is published.
+`pip install diamond-nagg-map` also works. Versions before 0.9.0 have a broken `diamond-nagg-map` command. To install the latest code from GitHub instead, use `uv tool install git+https://github.com/whtowbin/Diamond_NAgg_Map`.
 
 Options:
 
